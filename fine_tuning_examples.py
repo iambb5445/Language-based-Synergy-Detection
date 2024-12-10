@@ -896,19 +896,21 @@ examples = [
 
             ### Order of Events
             - **Playing Card 8 First:** 
-            - You maintain Block from previous plays.
+            - You maintain the current Block and the Block from future plays.
 
             - **Playing Another Card 8 Next:** 
             - Does nothing since the block is already maintined
 
             ### Analyzing the {SYNERGY_KEYWORD_CAPITALIZED}:
             - While Card 8 is a good card in its own right, it has no extra effect when played with another Card 8.
+            - Instead of getting the effect of first card (Card 8) plus second card (the second Card 8), we only get effect of one Card 8.
+            - There is a difference in the effect that we get from playing these two cards together in one run compared to the effect of playing one plus the effect of playing the other.
             
             ### Conclusion:
-            The engagement demonstrates no {SYNERGY_KEYWORD} through playing the second Card 8 because the effect cannot compound.
+            The engagement demonstrates negative {SYNERGY_KEYWORD} through playing the second Card 8 because the effect has lessened compared to adding the effect of the two together.
 
             Final score:
-            0""")
+            -1""")
     },
     #15, 19, 63, 73; 25, 32, 52, 73
     {
@@ -1679,6 +1681,7 @@ examples = [
 
             ### Analyzing the {SYNERGY_KEYWORD_CAPITALIZED}:
             - Card 11 is an Attack type, so its damage will be doubled due to the play effects of Card 7, resulting in significantly higher damage overall.
+            - Additionally, the second time it's played no more cards will be exhausted.
 
             ### Conclusion:
             This plays out as a positive {SYNERGY_KEYWORD} due to doubling the damage of Card 11 based on the order, leaving favorable outcomes from the play.
@@ -1704,10 +1707,14 @@ examples = [
 
             - **Playing Card 12 Next:**
             - This exhausts all cards in your hand and deals damage based on the count of cards exhausted.
+            - If the cards are played back to back, Card 12 is then played a second time because of the effect of Card 7.
 
             ### Analyzing the {SYNERGY_KEYWORD_CAPITALIZED}:
             - The mechanics sit in favor of any attack damage derived from the doubled effects, especially if multiple cards are exhausted creating higher damage outputs.
-            - However, since all the cards are exhausted the first time, the doubling doesn't result in any extra damage.
+            - The first time Card 12 is played, some number of cards are exhausted from your hand and the damage dealt is based on the number of these cards.
+            - The effect of Card 7 results in the added effect of playing Card 12 a second time.
+            - However, since all the cards are exhausted the first time, the doubling doesn't result in any extra damage, as if the second time did not happen.
+
 
             ### Conclusion:
             This is no {SYNERGY_KEYWORD} due to the interaction of losing cards through exhaustion, making the copy deal no damage.
