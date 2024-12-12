@@ -5,7 +5,7 @@ from sts_prompts import get_sts_prompts, get_single_card_ask, get_multi_card_mul
 from utility import TextUtil
 from subset import subrows
 
-thread_count = 50
+thread_count = 61
 SHOULD_SUBSET = False
 RETRY_COUNT = 3
 
@@ -29,9 +29,13 @@ def ask_until_format_is_right(chat, prompt, bundle_size:None|int=None):
                 float(result.split()[-1])
             break
         except (ValueError, IncorrectResponseLengthException, IndexError) as e:
-            print(f"Unacceptable response for \"{prompt}\"")
-            print(result)
-            print(f"Exception: {e}")
+            if len(result) == 0:
+                print("Empty result: connection error")
+                i -= 1
+            else:
+                print(f"Unacceptable response for \"{prompt}\"")
+                print(result)
+                print(f"Exception: {e}")
             if i == RETRY_COUNT - 1:
                 result = f'invalid response {RETRY_COUNT} times\n[latest] {result.replace("---NEXT---", "<NEXT_TOKEN_REPLACED>")}\nNaN\n' * (1 if bundle_size is None else bundle_size)
                 result += f'---NEXT---\nNaN\n' * (0 if bundle_size is None else (bundle_size - 1))
@@ -40,13 +44,13 @@ def ask_until_format_is_right(chat, prompt, bundle_size:None|int=None):
     return result
 
 def get_request_and_response(chat, card1, card2, id1, id2, starting_card_number):
-        prompt, id = get_single_card_ask(card1, card2, id1, id2, starting_card_number)
+        prompt, id, _ = get_single_card_ask(card1, card2, id1, id2, starting_card_number)
         result = ask_until_format_is_right(chat, prompt)
         return prompt, result, id
     
 # TODO change the type to LLMConnector instead of OpenAIChat
 def get_multi_request_and_response(chat: OpenAIChat, x_cards, y_cards, x_indices, y_indices, starting_card_number):
-    prompts, ids = get_multi_card_multi_ask(x_cards, y_cards, x_indices, y_indices, starting_card_number)
+    prompts, ids, _ = get_multi_card_multi_ask(x_cards, y_cards, x_indices, y_indices, starting_card_number)
     results = []
     chat = chat.copy()
     chat.chat_format = True
@@ -56,7 +60,7 @@ def get_multi_request_and_response(chat: OpenAIChat, x_cards, y_cards, x_indices
     return prompts, results, ids
 
 def get_bundle_request_and_response(chat: LLMConnector, x_cards, y_cards, x_indices, y_indices, starting_card_number):
-    prompt, ids = get_multi_card_bundle_ask(x_cards, y_cards, x_indices, y_indices, starting_card_number)
+    prompt, ids, _ = get_multi_card_bundle_ask(x_cards, y_cards, x_indices, y_indices, starting_card_number)
     # print(TextUtil.get_colored_text(f"{x_indices} x {y_indices}\n", TextUtil.TEXT_COLOR.Red))
     # print(TextUtil.get_colored_text(prompt, TextUtil.TEXT_COLOR.Yellow))
     results = ask_until_format_is_right(chat, prompt, len(x_cards) * len(y_cards)).split('---NEXT---')
@@ -64,7 +68,7 @@ def get_bundle_request_and_response(chat: LLMConnector, x_cards, y_cards, x_indi
     return prompt, results, ids
 
 def get_bundle_no_local_request_and_response(chat: LLMConnector, card_pairs, index_pairs, starting_card_number):
-    prompt, ids = get_multi_card_bundle_no_local_ask(card_pairs, index_pairs, starting_card_number)
+    prompt, ids, _ = get_multi_card_bundle_no_local_ask(card_pairs, index_pairs, starting_card_number)
     # print(TextUtil.get_colored_text(f"{x_indices} x {y_indices}\n", TextUtil.TEXT_COLOR.Red))
     # print(TextUtil.get_colored_text(prompt, TextUtil.TEXT_COLOR.Yellow))
     results = ask_until_format_is_right(chat, prompt, len(card_pairs)).split('---NEXT---')
@@ -150,7 +154,7 @@ def run_bundle_no_local_ask_job(chat, cards_df, eq_bundle_card_count, next_card_
     return zip(prompts, results, ids)
 
 if __name__=="__main__":
-    system_prompt, prompts, responses, next_card_number = get_sts_prompts(ask_type=AskType.NP_Bundle, shot_count=None)
+    system_prompt, prompts, responses, next_card_number = get_sts_prompts(ask_type=AskType.NP_Bundle_Revised, shot_count=None)
     chat = OpenAIChat(OpenAIChat.OpenAIModel.GPT_4O_mini, chat_format=False, system_message=system_prompt)
     for prompt, response in zip(prompts, responses):
         chat.inject(prompt, response)

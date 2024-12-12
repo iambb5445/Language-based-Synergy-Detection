@@ -2339,20 +2339,25 @@ if __name__ == "__main__":
                 df = pd.read_csv("IronClad Card Names.csv")
                 if ask_type == AskType.NP_Bundle_Revised:
                     example_chat = chat.copy()
-                    prompt, ids = get_multi_card_bundle_ask(x_cards, y_cards, x_indices, y_indices, next_card_number)
+                    prompt, ids, _ = get_multi_card_bundle_ask(x_cards, y_cards, x_indices, y_indices, next_card_number)
                     example_chat.inject(prompt, example["BundledAnswer"])
                     dump_json(example_chat, outfile)
                     counter.count()
                 elif ask_type == AskType.Negative_or_Positive_Revised:
                     prompts = []
+                    _, _, bundle_id_mapping = get_multi_card_bundle_ask(x_cards, y_cards, x_indices, y_indices, next_card_number)
                     # TODO find a better way to do this.
                     # This is dangerous because it assumes the order of questions are always X*Y
-                    for x_card, x_ind in zip(x_cards, x_indices):
-                        for y_card, y_ind in zip(y_cards, y_indices):
-                            prompt, ids = get_single_card_ask(x_card, y_card, x_ind, y_ind, next_card_number)
-                            prompts.append(prompt)
                     # removes the case number and splits the cases
                     answers = ['\n'.join(answer.split('\n')[1:]) for answer in example["BundledAnswer"].split("---NEXT---\n")]
+                    for x, (x_card, x_ind) in enumerate(zip(x_cards, x_indices)):
+                        for y, (y_card, y_ind) in enumerate(zip(y_cards, y_indices)):
+                            prompt, ids, single_id_mapping = get_single_card_ask(x_card, y_card, x_ind, y_ind, next_card_number)
+                            for original_id, single_text_id in single_id_mapping.items():
+                                bundle_text_id = bundle_id_mapping[original_id]
+                                answers[len(prompts)] = answers[len(prompts)].\
+                                    replace(f"Card {bundle_text_id}", f"Card {single_text_id}")
+                            prompts.append(prompt)
                     for prompt, answer in zip(prompts, answers):
                         example_chat = chat.copy()
                         assert 'Case' not in answer

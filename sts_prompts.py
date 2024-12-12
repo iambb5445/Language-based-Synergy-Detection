@@ -1488,6 +1488,7 @@ def get_sts_prompts(ask_type: AskType, shot_count=None):
     return system_message, prompts, responses, next_card_number
 
 def get_single_card_ask(card1, card2, id1, id2, starting_card_number):
+    card_def = {id1: starting_card_number}
     card1_type = card1['Type']
     card1_cost = card1['Cost']
     card1_desc = card1['Description']
@@ -1505,7 +1506,8 @@ def get_single_card_ask(card1, card2, id1, id2, starting_card_number):
         Card {starting_card_number} ({card1_type} Type) - Cost {card1_cost}: {card1_desc}
         Card {starting_card_number + 1} ({card2_type} Type) - Cost {card2_cost}: {card2_desc}
         What is the {SYNERGY_KEYWORD} effect of playing Card {starting_card_number}, then Card {starting_card_number + 1}?\n''')
-    return prompt, (id1, id2)
+        card_def[id2] = starting_card_number + 1
+    return prompt, (id1, id2), card_def
 
 def get_multi_card_multi_ask(cards_x, cards_y, x_indices, y_indices, starting_card_number: int):
     card_def = {}
@@ -1530,7 +1532,7 @@ def get_multi_card_multi_ask(cards_x, cards_y, x_indices, y_indices, starting_ca
                 prompt += f"What is the {SYNERGY_KEYWORD} effect of playing Card {card_def[x]}, then Card {card_def[y]}?"
             prompts.append(prompt)
             ids.append((x, y))
-    return prompts, ids
+    return prompts, ids, card_def
 
 def get_multi_card_bundle_ask(cards_x, cards_y, x_indices, y_indices, starting_card_number: int):
     prompt = "Let's say we have:\nCards:\n"
@@ -1556,7 +1558,7 @@ def get_multi_card_bundle_ask(cards_x, cards_y, x_indices, y_indices, starting_c
                 prompt += f"{question_counter}. What is the {SYNERGY_KEYWORD} effect of playing Card {card_def[x]}, then Card {card_def[y]}?\n"
             question_counter += 1
             ids.append((x, y))
-    return prompt, ids
+    return prompt, ids, card_def
 
 def get_multi_card_bundle_no_local_ask(card_pairs, index_pairs, starting_card_number: int):
     prompt = "Let's say we have:\nCards:\n"
@@ -1576,4 +1578,4 @@ def get_multi_card_bundle_no_local_ask(card_pairs, index_pairs, starting_card_nu
             prompt += f"{question_ind+1}. What is the {SYNERGY_KEYWORD} effect of playing Card {card_def[x]}, then another one of Card {card_def[x]} again?\n"
         else:
             prompt += f"{question_ind+1}. What is the {SYNERGY_KEYWORD} effect of playing Card {card_def[x]}, then Card {card_def[y]}?\n"
-    return prompt, index_pairs
+    return prompt, index_pairs, card_def
