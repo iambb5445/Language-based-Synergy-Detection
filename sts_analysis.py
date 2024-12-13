@@ -1,4 +1,4 @@
-from llm_connector import LLMConnector, OpenAIChat
+from llm_connector import LLMConnector, OpenAILib, OpenAIChat, GeminiChat
 from joblib import delayed, Parallel
 from tqdm import tqdm
 from sts_prompts import get_sts_prompts, get_single_card_ask, get_multi_card_multi_ask, get_multi_card_bundle_ask, get_multi_card_bundle_no_local_ask, AskType
@@ -49,7 +49,7 @@ def get_request_and_response(chat, card1, card2, id1, id2, starting_card_number)
         return prompt, result, id
     
 # TODO change the type to LLMConnector instead of OpenAIChat
-def get_multi_request_and_response(chat: OpenAIChat, x_cards, y_cards, x_indices, y_indices, starting_card_number):
+def get_multi_request_and_response(chat: OpenAILib, x_cards, y_cards, x_indices, y_indices, starting_card_number):
     prompts, ids, _ = get_multi_card_multi_ask(x_cards, y_cards, x_indices, y_indices, starting_card_number)
     results = []
     chat = chat.copy()
@@ -154,14 +154,16 @@ def run_bundle_no_local_ask_job(chat, cards_df, eq_bundle_card_count, next_card_
     return zip(prompts, results, ids)
 
 if __name__=="__main__":
-    system_prompt, prompts, responses, next_card_number = get_sts_prompts(ask_type=AskType.NP_Bundle_Revised, shot_count=None)
+    system_prompt, prompts, responses, next_card_number = get_sts_prompts(ask_type=AskType.Negative_or_Positive_Revised, shot_count=1)
     chat = OpenAIChat(OpenAIChat.OpenAIModel.GPT_4O_mini, chat_format=False, system_message=system_prompt)
+    # chat = GeminiChat(GeminiChat.GeminiModel.Gemini_1_Pro, chat_format=False, system_message=system_prompt)
     for prompt, response in zip(prompts, responses):
         chat.inject(prompt, response)
     import pandas as pd
     import numpy as np
     import time
-    output_filename = f"synergy_results_{chat.model_identifier}_{int(time.time())}"
+    from utility import get_safe_filename
+    output_filename = get_safe_filename(f"synergy_results_{chat.model_identifier}", timed=True)
     df = pd.read_csv("IronClad Card Names.csv")
     # df = df[:6] # Test for first 3 cards only
     df = df.sample(frac=1, random_state=42).reset_index(drop=False) #shuffle
@@ -172,12 +174,15 @@ if __name__=="__main__":
     for prompt, response in zip(prompts, responses):
         log(prompt, response, output_filename, "[injected]")
 
-    # req_responses = run_single_ask_job(chat, df, next_card_number)
+    req_responses = run_single_ask_job(chat, df, next_card_number)
     # req_responses = run_multi_ask_job(chat, df, 4, next_card_number)
-    req_responses = run_bundle_ask_job(chat, df, 4, next_card_number) # AskType.NP_Bundle/Revised only!
+    # req_responses = run_bundle_ask_job(chat, df, 4, next_card_number) # AskType.NP_Bundle/Revised only!
     # req_responses = run_bundle_no_local_ask_job(chat, df, 4, next_card_number) # AskType.NP_Bundle/Revised only!
     for prompt, result, id in req_responses: # type: ignore
         index1, index2 = id
         log(prompt, result, output_filename)
-        synergies[index_mapping[index1], index_mapping[index2]] = float(result.split()[-1])
-    pd.DataFrame(synergies).to_csv(f"{output_filename}{'_subset' if SHOULD_SUBSET else ''}.csv")
+        try:
+            synergies[index_mapping[index1], index_mapping[index2]] = float(result.split()[-1])
+        except Exception as e:
+            print(f"{e}\nError for {index_mapping[index1]} {index_mapping[index2]}, response: ...{result[-10:]}")
+            synergies[index_mapping[index1], index_mapping[index2]] = float("NaN")

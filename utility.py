@@ -32,3 +32,13 @@ def cast(s: str, type_cast, default=None, supress_error:bool=True):
             return default
         raise e
     
+def get_safe_filename(filename: str, timed:bool=False, extension:str|None=None):
+    import time
+    keepcharacters = (' ','.','_', '-')
+    filename = "".join(c for c in filename if c.isalnum() or c in keepcharacters).rstrip()
+    if timed:
+        filename += f"_{int(time.time())}"
+    if extension is not None:
+        extension = "".join(c for c in extension if c.isalnum() or c in keepcharacters).rstrip()
+        filename += f".{extension}"
+    return filename

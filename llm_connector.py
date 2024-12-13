@@ -3,7 +3,7 @@ from __future__ import annotations
 import openai
 import transformers
 import time
-from enum import StrEnum
+from enum import StrEnum, Enum
 import copy
 
 class RateLimitException(Exception):
@@ -54,51 +54,42 @@ class LLMConnector:
         LLMConnector.last_call_timestamp[self.model_identifier] = current
         return response
     
-class OpenAIChat(LLMConnector):
-    class OpenAIModel(StrEnum):
-        GPT_4 = "gpt-4"
-        GPT_Turbo_4 = "gpt-4-turbo-2024-04-09" # gpt-4-turbo for latest
-        GPT_Turbo_35 = "gpt-3.5-turbo"
-        GPT_4O = "gpt-4o"
-        GPT_4O_mini = "gpt-4o-mini"
+class OpenAILib(LLMConnector):
+    def get_client(self) -> openai.OpenAI:
+        raise Exception(f"Abstract class does not implement get_client")
     
-    TOKEN_LIMITS = { #https://platform.openai.com/account/limits
-        OpenAIModel.GPT_4: 300000,
-        OpenAIModel.GPT_Turbo_4: 800000,
-        OpenAIModel.GPT_Turbo_35: 10000000,
-        OpenAIModel.GPT_4O: 2000000,
-        OpenAIModel.GPT_4O_mini: 10000000,
-    }
-    CLIENT = None
-
-    def get_client(self):
-        if OpenAIChat.CLIENT is None:
-            from auth import OpenAI_AUTH
-            OpenAIChat.CLIENT = openai.OpenAI(api_key=OpenAI_AUTH)
-        return OpenAIChat.CLIENT
-    
-    def __init__(self, openAI_model: OpenAIModel, system_message: str|None=None, chat_format=True):
-        if openAI_model == OpenAIChat.OpenAIModel.GPT_4O:
-            input("[Warning] Using the more expensive GPT 4O model [press Enter to continue]")
-        self.openAI_model = openAI_model
+    def __init__(self, model_name: str, system_message: str|None=None, chat_format=True):
+        self.model_name = model_name
         self.chat_format = chat_format
         self.chat_log = [] if system_message is None else [{"role": "system", "content": system_message}]
-        super().__init__(str(self.openAI_model))
-    
-    def copy(self) -> OpenAIChat:
-        ret = OpenAIChat(self.openAI_model, None, self.chat_format)
-        ret.chat_log = copy.deepcopy(self.chat_log)
-        return ret
+        super().__init__(model_name)
+
+    def copy(self) -> OpenAILib:
+        raise Exception(f"Abstract class does not implement copy")
     
     def _get_token_limit_per_minute(self) -> int:
-        return OpenAIChat.TOKEN_LIMITS[self.openAI_model] #TODO share between parallel instances
+        raise Exception(f"Abstract class does not implement _get_token_limit_per_minute")
     
     def _get_response(self, request) -> tuple[int, str]:
         try:
             response = self.get_client().chat.completions.create(**request)
-        except Exception as e:
-            print(f"OpenAI Exception:\n{e}")
-            raise e
+        except openai.RateLimitError as e:
+            import random
+            print(f"\n(rate) nClient Exception:\n{e}")
+            time.sleep(random.randint(30, 60))
+            return 0, ""
+        except openai.APITimeoutError as e:
+            print(f"\n(timeout) Client Exception:\n{e}")
+            time.sleep(10)
+            return 0, ""
+        except openai.APIStatusError as e:
+            print(f"\n(status) Client Exception:\n{e}")
+            time.sleep(10)
+            return 0, ""
+        except Exception as e: # some errors here seem to be from the library. e.g. APIConnectionError.__init__() takes 1 positional argument but 2 were given
+            print(f"\nClient Exception:\n{e}")
+            time.sleep(10)
+            return 0, ""
         tokens_used = int(response.usage.total_tokens)
         response_text = response.choices[0].message.content
         if self.chat_format:
@@ -113,7 +104,8 @@ class OpenAIChat(LLMConnector):
     def _prompt_to_request(self, prompt: str) -> dict:
         # https://platform.openai.com/docs/guides/chat-completions/overview
         return {
-                'model': self.openAI_model,
+                'model': self.model_name,
+                # 'model': 'ft:gpt-4o-mini-2024-07-18:personal:160-examples-single-8-batch:AdjGLASG',
                 'messages': self.chat_log + [{"role": "user", "content": prompt}],
             }
 
@@ -136,6 +128,79 @@ class OpenAIChat(LLMConnector):
         request = {'messages': messages}
         return request
     
+class OpenAIChat(OpenAILib):
+    class OpenAIModel(StrEnum):
+        GPT_4 = "gpt-4"
+        GPT_Turbo_4 = "gpt-4-turbo-2024-04-09" # gpt-4-turbo for latest
+        GPT_Turbo_35 = "gpt-3.5-turbo"
+        GPT_4O = "gpt-4o"
+        GPT_4O_mini = "gpt-4o-mini"
+    
+    TOKEN_LIMITS = { #https://platform.openai.com/account/limits
+        OpenAIModel.GPT_4: 300000,
+        OpenAIModel.GPT_Turbo_4: 800000,
+        OpenAIModel.GPT_Turbo_35: 10000000,
+        OpenAIModel.GPT_4O: 2000000,
+        OpenAIModel.GPT_4O_mini: 10000000,
+    }
+    CLIENT = None
+    def __init__(self, openAI_model:OpenAIChat.OpenAIModel, system_message: str|None=None, chat_format=True):
+        if openAI_model == OpenAIChat.OpenAIModel.GPT_4O:
+            input("[Warning] Using the more expensive GPT 4O model [press Enter to continue]")
+        self.openAI_model = openAI_model
+        super().__init__(str(self.openAI_model), system_message, chat_format)
+    
+    # TODO perhaps this should be moved to openAILib, since it has info about the existance of a chat_log
+    def copy(self) -> OpenAIChat:
+        ret = OpenAIChat(self.openAI_model, None, self.chat_format)
+        ret.chat_log = copy.deepcopy(self.chat_log)
+        return ret
+
+    def get_client(self):
+        from auth import OpenAI_AUTH
+        api_key = OpenAI_AUTH
+        if OpenAIChat.CLIENT is None:
+            OpenAIChat.CLIENT = openai.OpenAI(api_key=api_key)
+        return OpenAIChat.CLIENT
+    
+    def _get_token_limit_per_minute(self) -> int:
+        return OpenAIChat.TOKEN_LIMITS[self.openAI_model] #TODO share between parallel instances
+
+class GeminiChat(OpenAILib):
+    class GeminiModel(StrEnum):
+        Gemini_1_Pro = "google/gemini-1.0-pro"
+    
+    TOKEN_LIMITS = {
+        # https://cloud.google.com/vertex-ai/generative-ai/docs/quotas
+        GeminiModel.Gemini_1_Pro: 4000000,
+    }
+    CLIENT = None
+    def __init__(self, gemini_model:GeminiChat.GeminiModel, system_message: str|None=None, chat_format=True):
+        self.gemini_model = gemini_model
+        super().__init__(str(self.gemini_model), system_message, chat_format)
+
+    # TODO perhaps this should be moved to openAILib, since it has info about the existance of a chat_log
+    def copy(self) -> GeminiChat:
+        ret = GeminiChat(self.gemini_model, None, self.chat_format)
+        ret.chat_log = copy.deepcopy(self.chat_log)
+        return ret
+
+    def get_client(self):
+        import google.auth
+        import google.auth.transport.requests
+        creds, project = google.auth.default()
+        auth_req = google.auth.transport.requests.Request()
+        creds.refresh(auth_req) # type: ignore
+        from auth import Gemini_Project_ID as project_id
+        from auth import Gemini_AUTH
+        base_url = f'https://us-central1-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/us-central1/endpoints/openapi'
+        api_key = creds.token # type: ignore
+        if GeminiChat.CLIENT is None:
+            GeminiChat.CLIENT = openai.OpenAI(api_key=api_key, base_url=base_url)
+        return GeminiChat.CLIENT
+    
+    def _get_token_limit_per_minute(self) -> int:
+        return GeminiChat.TOKEN_LIMITS[self.gemini_model] #TODO share between parallel instances
 
 class QWENChat(LLMConnector):
     class QWENModel(StrEnum):

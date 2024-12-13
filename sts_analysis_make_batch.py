@@ -19,7 +19,7 @@ if __name__=="__main__":
     json_requests = []
     for index1, card1 in df.iterrows():
         for index2, card2 in df.iterrows():    
-            prompt, _ = get_single_card_ask(card1, card2, index1, index2, next_card_number)
+            prompt, _, _ = get_single_card_ask(card1, card2, index1, index2, next_card_number)
             json_requests.append(chat.prompt_as_API_request(prompt, f"cards-{index1}-{index2}"))
 
     import json
