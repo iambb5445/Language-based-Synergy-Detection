@@ -186,4 +186,6 @@ if __name__=="__main__":
         except Exception as e:
             print(f"{e}\nError for {index_mapping[index1]} {index_mapping[index2]}, response: ...{result[-10:]}")
             synergies[index_mapping[index1], index_mapping[index2]] = float("NaN")
-    pd.DataFrame(synergies).to_csv(f"{output_filename}{'_subset' if SHOULD_SUBSET else ''}.csv")
+    csv_filename = f"{output_filename}{'_subset' if SHOULD_SUBSET else ''}.csv"
+    pd.DataFrame(synergies).to_csv(csv_filename)
+    print(f"saved as {csv_filename}")

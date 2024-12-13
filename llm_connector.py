@@ -13,6 +13,7 @@ class LLMConnector:
     last_call_timestamp: dict[str, float] = {}
     tokens_used_this_minute: dict[str, int] = {}
     def __init__(self, model_identifier: str):
+        print(f"Connector made for mode {model_identifier}")
         self.model_identifier = model_identifier
     
     def _get_token_limit_per_minute(self) -> int:
