@@ -6,17 +6,26 @@ import time
 from enum import StrEnum, Enum
 import copy
 
+# This is not good. thread count should be shared between connetor and api token, not like this.
+# This number is both here and in sts_analysis, but cannot import it without fixing circular imports
+# However, 61 is the max number of threads, so it's unlikely that this is an understimation
+thread_count = 61
+
 class RateLimitException(Exception):
     pass
 
 class LLMConnector:
     last_call_timestamp: dict[str, float] = {}
     tokens_used_this_minute: dict[str, int] = {}
+    requests_used_this_minute: dict[str, int] = {}
     def __init__(self, model_identifier: str):
         print(f"Connector made for mode {model_identifier}")
         self.model_identifier = model_identifier
     
-    def _get_token_limit_per_minute(self) -> int:
+    def _get_token_limit_per_minute(self) -> int|None:
+        raise Exception("not implemented yet")
+
+    def _get_request_limit_per_minute(self) -> int|None:
         raise Exception("not implemented yet")
     
     def _get_response(self, request) -> tuple[int, str]:
@@ -36,12 +45,19 @@ class LLMConnector:
         current = time.time()
         prev = LLMConnector.last_call_timestamp.get(self.model_identifier, None)
         tokens_used = LLMConnector.tokens_used_this_minute.get(self.model_identifier, None)
+        requests_used = LLMConnector.requests_used_this_minute.get(self.model_identifier, None)
         est_token_count = len(prompt)//4
-        limit = self._get_token_limit_per_minute()
+        token_limit = self._get_token_limit_per_minute()
+        request_limit = self._get_request_limit_per_minute()
         eps_seconds = 1
-        if prev is not None and tokens_used is not None and tokens_used + est_token_count > limit:
+        if prev is not None and (
+            (tokens_used is not None and token_limit is not None and tokens_used + est_token_count > token_limit) or\
+            (requests_used is not None and request_limit is not None and requests_used + 1 > request_limit)
+        ):
+            print(f"Limit reached. Sleeping for: {60 - min(current - prev, 60) + eps_seconds}")
             time.sleep(60 - min(current - prev, 60) + eps_seconds)
             LLMConnector.tokens_used_this_minute[self.model_identifier] = 0
+            LLMConnector.requests_used_this_minute[self.model_identifier] = 0
         try:
             tokens_used, response = self._get_response(request)
         except RateLimitException as e:
@@ -52,6 +68,8 @@ class LLMConnector:
         current = time.time()
         LLMConnector.tokens_used_this_minute[self.model_identifier] = \
             LLMConnector.tokens_used_this_minute.get(self.model_identifier, 0) + tokens_used
+        LLMConnector.requests_used_this_minute[self.model_identifier] = \
+            LLMConnector.requests_used_this_minute.get(self.model_identifier, 0) + 1
         LLMConnector.last_call_timestamp[self.model_identifier] = current
         return response
     
@@ -68,8 +86,11 @@ class OpenAILib(LLMConnector):
     def copy(self) -> OpenAILib:
         raise Exception(f"Abstract class does not implement copy")
     
-    def _get_token_limit_per_minute(self) -> int:
+    def _get_token_limit_per_minute(self) -> int|None:
         raise Exception(f"Abstract class does not implement _get_token_limit_per_minute")
+    
+    def _get_request_limit_per_minute(self) -> int|None:
+        raise Exception(f"Abstract class does not implement _get_request_limit_per_minute")
     
     def _get_response(self, request) -> tuple[int, str]:
         try:
@@ -77,7 +98,7 @@ class OpenAILib(LLMConnector):
         except openai.RateLimitError as e:
             import random
             print(f"\n(rate) nClient Exception:\n{e}")
-            time.sleep(random.randint(30, 60))
+            time.sleep(random.randint(30, 90))
             return 0, ""
         except openai.APITimeoutError as e:
             print(f"\n(timeout) Client Exception:\n{e}")
@@ -164,17 +185,35 @@ class OpenAIChat(OpenAILib):
             OpenAIChat.CLIENT = openai.OpenAI(api_key=api_key)
         return OpenAIChat.CLIENT
     
-    def _get_token_limit_per_minute(self) -> int:
+    def _get_token_limit_per_minute(self) -> int|None:
         return OpenAIChat.TOKEN_LIMITS[self.openAI_model] #TODO share between parallel instances
+    
+    def _get_request_limit_per_minute(self) -> int|None:
+        return None
 
 class GeminiChat(OpenAILib):
+    CREDENTIAL_TIMER = None
     class GeminiModel(StrEnum):
         Gemini_1_Pro = "google/gemini-1.0-pro"
+        Gemini_15_Pro_002 = "google/gemini-1.5-pro-002"
+        Gemini_15_Flash_002 = "google/gemini-1.5-flash-002"
     
     TOKEN_LIMITS = {
         # https://cloud.google.com/vertex-ai/generative-ai/docs/quotas
+        # the real limitations here are the requets per minute limits, which has not been implemented here
         GeminiModel.Gemini_1_Pro: 4000000,
+        GeminiModel.Gemini_15_Pro_002: 4000000,
+        GeminiModel.Gemini_15_Flash_002: 4000000,
     }
+
+    REQUEST_LIMITS = {
+        # https://cloud.google.com/vertex-ai/generative-ai/docs/quotas
+        # the real limitations here are the requets per minute limits, which has not been implemented here
+        GeminiModel.Gemini_1_Pro: 300,
+        GeminiModel.Gemini_15_Pro_002: 60,
+        GeminiModel.Gemini_15_Flash_002: 200,
+    }
+
     CLIENT = None
     def __init__(self, gemini_model:GeminiChat.GeminiModel, system_message: str|None=None, chat_format=True):
         self.gemini_model = gemini_model
@@ -187,6 +226,13 @@ class GeminiChat(OpenAILib):
         return ret
 
     def get_client(self):
+        expired = False
+        if GeminiChat.CREDENTIAL_TIMER is not None and (time.time() - GeminiChat.CREDENTIAL_TIMER) > 30*60:
+            expired = True
+        if GeminiChat.CLIENT is not None and not expired:
+            return GeminiChat.CLIENT
+        GeminiChat.CREDENTIAL_TIMER = time.time()
+        print("refreshing the credentials")
         import google.auth
         import google.auth.transport.requests
         creds, project = google.auth.default()
@@ -196,12 +242,16 @@ class GeminiChat(OpenAILib):
         from auth import Gemini_AUTH
         base_url = f'https://us-central1-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/us-central1/endpoints/openapi'
         api_key = creds.token # type: ignore
-        if GeminiChat.CLIENT is None:
-            GeminiChat.CLIENT = openai.OpenAI(api_key=api_key, base_url=base_url)
+        GeminiChat.CLIENT = openai.OpenAI(api_key=api_key, base_url=base_url)
         return GeminiChat.CLIENT
     
-    def _get_token_limit_per_minute(self) -> int:
-        return GeminiChat.TOKEN_LIMITS[self.gemini_model] #TODO share between parallel instances
+    def _get_token_limit_per_minute(self) -> int|None:
+        #TODO find a better way to access number of connectors sharing this resource
+        return max(GeminiChat.TOKEN_LIMITS[self.gemini_model] // thread_count, 1)
+    
+    def _get_request_limit_per_minute(self) -> int|None:
+        #TODO find a better way to access number of connectors sharing this resource
+        return max(GeminiChat.REQUEST_LIMITS[self.gemini_model] // thread_count, 1)
 
 class QWENChat(LLMConnector):
     class QWENModel(StrEnum):

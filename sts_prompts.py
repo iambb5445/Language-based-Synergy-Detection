@@ -671,7 +671,7 @@ def get_few_shot_examples(ask_type: AskType, shot_count=None):
             0\n'''
         ))
         prompts.append(dedent(
-            '''What is the {SYNERGY_KEYWORD} effect of playing Card 2, then Card 1?\n'''
+            f'''What is the {SYNERGY_KEYWORD} effect of playing Card 2, then Card 1?\n'''
         ))
         responses.append(dedent(
             f'''### Card Descriptions:
@@ -705,7 +705,7 @@ def get_few_shot_examples(ask_type: AskType, shot_count=None):
             1\n'''
         ))
         prompts.append(dedent(
-            '''Let's look at another example:
+            f'''Let's look at another example:
             Card 3 (Skill Type) - Cost 0: "Lose 3 HP. Gain 2 Energy."
             What is the {SYNERGY_KEYWORD} effect of playing Card 1, then Card 3?\n'''
         ))
@@ -740,7 +740,7 @@ def get_few_shot_examples(ask_type: AskType, shot_count=None):
             0\n'''
         ))
         prompts.append(dedent(
-            '''What is the {SYNERGY_KEYWORD} effect of playing Card 3, then Card 1?\n'''
+            f'''What is the {SYNERGY_KEYWORD} effect of playing Card 3, then Card 1?\n'''
         ))
         responses.append(dedent(
             f'''### Card Descriptions:
@@ -774,7 +774,7 @@ def get_few_shot_examples(ask_type: AskType, shot_count=None):
             1\n'''
         ))
         prompts.append(dedent(
-            '''What is the {SYNERGY_KEYWORD} effect of playing Card 2, then Card 3?\n'''
+            f'''What is the {SYNERGY_KEYWORD} effect of playing Card 2, then Card 3?\n'''
         ))
         responses.append(dedent(
             f'''### Card Descriptions:

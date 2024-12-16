@@ -30,7 +30,7 @@ def ask_until_format_is_right(chat, prompt, bundle_size:None|int=None):
             break
         except (ValueError, IncorrectResponseLengthException, IndexError) as e:
             if len(result) == 0:
-                print("Empty result: connection error")
+                print("Empty result: rate/connection/server error")
                 i -= 1
             else:
                 print(f"Unacceptable response for \"{prompt}\"")
@@ -156,7 +156,7 @@ def run_bundle_no_local_ask_job(chat, cards_df, eq_bundle_card_count, next_card_
 if __name__=="__main__":
     system_prompt, prompts, responses, next_card_number = get_sts_prompts(ask_type=AskType.Negative_or_Positive_Revised, shot_count=None)
     chat = OpenAIChat(OpenAIChat.OpenAIModel.GPT_4O_mini, chat_format=False, system_message=system_prompt)
-    # chat = GeminiChat(GeminiChat.GeminiModel.Gemini_1_Pro, chat_format=False, system_message=system_prompt)
+    # chat = GeminiChat(GeminiChat.GeminiModel.Gemini_15_Pro_002, chat_format=False, system_message=system_prompt)
     for prompt, response in zip(prompts, responses):
         chat.inject(prompt, response)
     import pandas as pd
@@ -165,7 +165,7 @@ if __name__=="__main__":
     from utility import get_safe_filename
     output_filename = get_safe_filename(f"synergy_results_{chat.model_identifier}", timed=True)
     df = pd.read_csv("IronClad Card Names.csv")
-    # df = df[:6] # Test for first 3 cards only
+    # df = df[:3] # Test for first 3 cards only
     df = df.sample(frac=1, random_state=42).reset_index(drop=False) #shuffle
     index_mapping = {new_idx: old_idx for new_idx, old_idx in enumerate(df['index'])}
 
@@ -178,6 +178,7 @@ if __name__=="__main__":
     # req_responses = run_multi_ask_job(chat, df, 4, next_card_number)
     # req_responses = run_bundle_ask_job(chat, df, 4, next_card_number) # AskType.NP_Bundle/Revised only!
     # req_responses = run_bundle_no_local_ask_job(chat, df, 4, next_card_number) # AskType.NP_Bundle/Revised only!
+    print("responses gathered. writing in file ...")
     for prompt, result, id in req_responses: # type: ignore
         index1, index2 = id
         log(prompt, result, output_filename)
@@ -186,6 +187,7 @@ if __name__=="__main__":
         except Exception as e:
             print(f"{e}\nError for {index_mapping[index1]} {index_mapping[index2]}, response: ...{result[-10:]}")
             synergies[index_mapping[index1], index_mapping[index2]] = float("NaN")
+    print("conversations logged. writing the final results...")
     csv_filename = f"{output_filename}{'_subset' if SHOULD_SUBSET else ''}.csv"
     pd.DataFrame(synergies).to_csv(csv_filename)
     print(f"saved as {csv_filename}")
